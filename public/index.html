@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>corta.la — Acorta URLs</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <main class="container">
+      <h1>corta.la</h1>
+      <p>Ingresa una URL larga y te devolveremos una versión corta.</p>
+
+      <form id="shorten-form">
+        <input id="url-input" type="url" placeholder="https://ejemplo.com/larga/ruta" required />
+        <button type="submit">Acortar</button>
+      </form>
+
+      <div id="result" class="hidden">
+        <p>URL corta:</p>
+        <div id="short-link"></div>
+        <button id="copy-btn">Copiar</button>
+        <a id="stats-link" href="#">Ver estadísticas</a>
+      </div>
+
+      <section class="notes">
+        <h2>Privacidad</h2>
+        <p>No compartiremos tus URLs públicamente sin tu consentimiento.</p>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
