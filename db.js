@@ -11,10 +11,10 @@
 const mysql = require('mysql2/promise');
 
 const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'srv1138.hstgr.io',
-  user: process.env.DB_USER || 'u238056854_cortala',
-  password: process.env.DB_PASSWORD || 'aGrp1qZh#',
-  database: process.env.DB_NAME || 'u238056854_cortala',
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'corta_la',
   port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 3306,
   waitForConnections: true,
   connectionLimit: 10,
@@ -91,4 +91,10 @@ async function getStats(code) {
   };
 }
 
-module.exports = { init, createUrl, getUrlByCode, recordClick, incrementClicks, getStats };
+async function getAllUrls() {
+  const [rows] = await pool.execute(`SELECT id, code, original_url, created_at, clicks FROM urls ORDER BY created_at DESC LIMIT 1000`);
+  return rows;
+}
+
+module.exports = { init, createUrl, getUrlByCode, recordClick, incrementClicks, getStats, getAllUrls, pool };
+

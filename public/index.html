@@ -1,31 +1,69 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>corta.la — Acorta URLs</title>
-    <link rel="stylesheet" href="/style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
-    <main class="container">
-      <h1>corta.la</h1>
-      <p>Ingresa una URL larga y te devolveremos una versión corta.</p>
+    <main class="max-w-2xl mx-auto mt-12 bg-white p-8 rounded shadow p-4 pb-1">
+      <h1 class="text-3xl font-bold">corta.la</h1>
+      <p class="text-gray-600 mt-2">
+        Ingresa una URL larga y te devolveremos una versión corta.
+      </p>
 
-      <form id="shorten-form">
-        <input id="url-input" type="url" placeholder="https://ejemplo.com/larga/ruta" required />
-        <button type="submit">Acortar</button>
+      <form id="shorten-form" class="mt-6">
+        <div class="flex flex-col w-full gap-3">
+          <div class="w-full">
+            <input
+              id="url-input"
+              type="url"
+              class="w-full border rounded p-3"
+              placeholder="https://ejemplo.com/larga/ruta"
+              required
+            />
+          </div>
+
+          <div class="flex gap-2">
+            <input
+              id="alias-input"
+              type="text"
+              class="flex-1 border rounded p-2"
+              placeholder="Alias opcional (ej: mi-enlace)"
+            />
+            <button
+              id="check-alias"
+              type="button"
+              class="px-3 py-2 bg-blue-600 text-white rounded"
+            >
+              Comprobar
+            </button>
+            <button
+              type="submit"
+              class="px-3 py-2 bg-green-600 text-white rounded"
+            >
+              Acortar
+            </button>
+          </div>
+        </div>
       </form>
+
+      <div id="alias-msg" class="hidden"></div>
 
       <div id="result" class="hidden">
         <p>URL corta:</p>
         <div id="short-link"></div>
-        <button id="copy-btn">Copiar</button>
-        <a id="stats-link" href="#">Ver estadísticas</a>
+        <button id="copy-btn" class="px-3 py-2 bg-green-600 rounded">Copiar</button>
+        <button id="stats-link-btn" class="px-3 py-2 bg-teal-600 rounded">
+          <a id="stats-link" href="#">Ver estadísticas</a>
+        </div>
       </div>
 
-      <section class="notes">
-        <h2>Privacidad</h2>
-        <p>No compartiremos tus URLs públicamente sin tu consentimiento.</p>
+      <section class="notes bg-gray-600 text-white p-2 mt-6 rounded">
+        <h2 class="text-sm">Privacidad</h2>
+        <p class="text-xs">No compartiremos tus URLs públicamente sin tu consentimiento.</p>
       </section>
     </main>
 

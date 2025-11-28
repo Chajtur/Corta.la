@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>corta.la — Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-6">
+  <div class="max-w-4xl mx-auto bg-white p-6 rounded shadow">
+    <h1 class="text-2xl font-bold mb-4">Admin — URLs</h1>
+    <p class="mb-4 text-sm text-gray-600">Proteger con `x-admin-token` header o ?token= in URL (set `ADMIN_TOKEN` env).</p>
+    <div id="urls"></div>
+  </div>
+
+  <script>
+    async function load() {
+      try {
+        const token = prompt('Admin token (leave blank to cancel)');
+        if (!token) return;
+        const res = await fetch('/api/admin/urls', { headers: { 'x-admin-token': token } });
+        if (!res.ok) { alert('Error: ' + (await res.text())); return; }
+        const data = await res.json();
+        const container = document.getElementById('urls');
+        container.innerHTML = '';
+        data.urls.forEach(u => {
+          const el = document.createElement('div');
+          el.className = 'border p-3 rounded mb-2';
+          el.innerHTML = `<div class="flex justify-between"><div><strong>${u.code}</strong> — <a class="text-blue-600" href="${u.original_url}" target="_blank">${u.original_url}</a></div><div class="text-sm text-gray-500">Clicks: ${u.clicks}</div></div>`;
+          container.appendChild(el);
+        });
+      } catch (err) { alert('Error: ' + err.message); }
+    }
+    load();
+  </script>
+</body>
+</html>
