@@ -77,6 +77,24 @@ async function incrementClicks(urlId) {
   await pool.execute(sql, [urlId]);
 }
 
+// Insert click and increment counter in a single transaction to reduce writes and keep consistency
+async function recordClickAndIncrement(urlId, ip, referrer, ua) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const insertSql = `INSERT INTO clicks (url_id, ip, referrer, user_agent) VALUES (?, ?, ?, ?)`;
+    await conn.execute(insertSql, [urlId, ip, referrer, ua]);
+    const updateSql = `UPDATE urls SET clicks = clicks + 1 WHERE id = ?`;
+    await conn.execute(updateSql, [urlId]);
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
 async function getStats(code) {
   const url = await getUrlByCode(code);
   if (!url) return null;
@@ -96,5 +114,5 @@ async function getAllUrls() {
   return rows;
 }
 
-module.exports = { init, createUrl, getUrlByCode, recordClick, incrementClicks, getStats, getAllUrls, pool };
+module.exports = { init, createUrl, getUrlByCode, recordClick, incrementClicks, getStats, getAllUrls, recordClickAndIncrement, pool };
 
