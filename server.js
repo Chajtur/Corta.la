@@ -34,12 +34,39 @@ app.use(morgan('dev'));
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
+function positiveInteger(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const shortenWindowMs = positiveInteger(process.env.SHORTEN_RATE_WINDOW_MINUTES, 60) * 60 * 1000;
+const shortenMax = positiveInteger(process.env.SHORTEN_RATE_LIMIT, 10);
+const configuredCaptchaMinScore = Number.parseFloat(process.env.RECAPTCHA_MIN_SCORE || '0.7');
+const captchaMinScore = Number.isFinite(configuredCaptchaMinScore) && configuredCaptchaMinScore >= 0 && configuredCaptchaMinScore <= 1
+  ? configuredCaptchaMinScore
+  : 0.7;
+const captchaRequired = process.env.REQUIRE_CAPTCHA !== 'false';
+const blockedHosts = new Set(
+  (process.env.BLOCKED_URL_HOSTS || '')
+    .split(',')
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+function isBlockedHost(hostname) {
+  const normalizedHost = hostname.toLowerCase();
+  return [...blockedHosts].some((blockedHost) =>
+    normalizedHost === blockedHost || normalizedHost.endsWith(`.${blockedHost}`)
+  );
+}
+
 // Rate limiters
 const shortenLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 60, // max 60 requests per IP per hour for shorten
+  windowMs: shortenWindowMs,
+  max: shortenMax,
   standardHeaders: true,
   legacyHeaders: false,
+  message: { error: 'too many URLs created from this IP; try again later' },
 });
 
 const checkLimiter = rateLimit({
@@ -63,19 +90,29 @@ app.post('/api/shorten', shortenLimiter, async (req, res) => {
     let parsed;
     try { parsed = new URL(url); } catch (e) { return res.status(400).json({ error: 'invalid url' }); }
     if (!['http:', 'https:'].includes(parsed.protocol)) return res.status(400).json({ error: 'only http/https allowed' });
-    // If reCAPTCHA is enabled server-side, validate token
-    if (process.env.RECAPTCHA_SECRET) {
+    if (isBlockedHost(parsed.hostname)) return res.status(400).json({ error: 'URLs from this domain are not allowed' });
+
+    const captchaConfigured = Boolean(process.env.RECAPTCHA_SECRET && process.env.RECAPTCHA_SITE_KEY);
+    if (captchaRequired && !captchaConfigured) {
+      console.error('CAPTCHA is required but RECAPTCHA_SECRET and RECAPTCHA_SITE_KEY are not configured');
+      return res.status(503).json({ error: 'URL creation is temporarily unavailable' });
+    }
+
+    if (captchaConfigured) {
       if (!recaptchaToken) return res.status(400).json({ error: 'recaptcha token required' });
       try {
         const verifyUrl = `https://www.google.com/recaptcha/api/siteverify`;
-        const resp = await axios.post(verifyUrl, null, { params: { secret: process.env.RECAPTCHA_SECRET, response: recaptchaToken } });
+        const resp = await axios.post(verifyUrl, null, {
+          params: { secret: process.env.RECAPTCHA_SECRET, response: recaptchaToken, remoteip: req.ip },
+          timeout: 5000,
+        });
         const body = resp.data;
-        if (!body.success || (body.score !== undefined && body.score < 0.3)) {
-          return res.status(400).json({ error: 'recaptcha verification failed' });
+        if (!body.success || body.action !== 'shorten' || typeof body.score !== 'number' || body.score < captchaMinScore) {
+          return res.status(403).json({ error: 'recaptcha verification failed' });
         }
       } catch (err) {
         console.error('recaptcha verify error', err?.response?.data || err.message || err);
-        return res.status(500).json({ error: 'recaptcha verification error' });
+        return res.status(503).json({ error: 'recaptcha verification error' });
       }
     }
 

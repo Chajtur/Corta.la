@@ -29,11 +29,13 @@ Puntos principales:
 Admin endpoints (protegidos):
 - `GET /api/admin/urls` => lista de URLs (protegido por `ADMIN_TOKEN` via header `x-admin-token` o ?token=)
 
-reCAPTCHA:
-- Para habilitar verificación en el servidor define `RECAPTCHA_SECRET` (server) y `RECAPTCHA_SITE_KEY` (client). El frontend consultará `/api/config` y ejecutará grecaptcha si está configurado.
-
-Rate limiting:
-- Se aplica rate limiting a `/api/shorten` y `/api/check/:code`. Ajusta variables o límites en `server.js`.
+Protección contra abuso:
+- La creación de URLs requiere reCAPTCHA v3 por defecto. Define `RECAPTCHA_SECRET` y `RECAPTCHA_SITE_KEY`; si falta alguna, `POST /api/shorten` responde `503` y no crea enlaces.
+- El token debe corresponder a la acción `shorten` y superar `RECAPTCHA_MIN_SCORE` (por defecto `0.7`). Ajusta este valor solo después de revisar falsos positivos.
+- Cada IP puede crear 10 URLs por hora por defecto. Configura `SHORTEN_RATE_LIMIT` y `SHORTEN_RATE_WINDOW_MINUTES` para cambiar la cuota y su ventana.
+- Define `BLOCKED_URL_HOSTS` como una lista de dominios separada por comas para denegar campañas conocidas, por ejemplo: `BLOCKED_URL_HOSTS=spam.example,baddomain.test`. Los subdominios también se bloquean.
+- Durante pruebas locales sin CAPTCHA, establece `REQUIRE_CAPTCHA=false`. No uses ese valor en el servidor público.
+- El limitador en memoria es adecuado para una instancia. Con varias instancias o reinicios frecuentes, configura un almacenamiento compartido (por ejemplo Redis) para que el límite por IP sea efectivo en todo el despliegue.
 - `GET /:code` => redirección 302 a la URL original (registra click)
 - `GET /api/stats/:code` => devuelve metadatos y clicks recientes
 

@@ -1,3 +1,19 @@
+let recaptchaLoadPromise;
+
+function loadRecaptcha(siteKey) {
+  if (typeof grecaptcha !== 'undefined') return Promise.resolve();
+  if (!recaptchaLoadPromise) {
+    recaptchaLoadPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = `https://www.google.com/recaptcha/api.js?render=${encodeURIComponent(siteKey)}`;
+      script.onload = resolve;
+      script.onerror = () => reject(new Error('No se pudo cargar reCAPTCHA'));
+      document.head.appendChild(script);
+    });
+  }
+  return recaptchaLoadPromise;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const form = document.getElementById('shorten-form');
   const input = document.getElementById('url-input');
@@ -29,17 +45,9 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const cfg = await fetch('/api/config').then(r => r.json());
         if (cfg.recaptchaSiteKey) {
-          // load grecaptcha if needed
-          if (typeof grecaptcha === 'undefined') {
-            const s = document.createElement('script');
-            s.src = `https://www.google.com/recaptcha/api.js?render=${cfg.recaptchaSiteKey}`;
-            document.head.appendChild(s);
-            // wait briefly for script to load
-            await new Promise(r => setTimeout(r, 600));
-          }
-          if (typeof grecaptcha !== 'undefined') {
-            recaptchaToken = await grecaptcha.execute(cfg.recaptchaSiteKey, { action: 'shorten' });
-          }
+          await loadRecaptcha(cfg.recaptchaSiteKey);
+          await new Promise(resolve => grecaptcha.ready(resolve));
+          recaptchaToken = await grecaptcha.execute(cfg.recaptchaSiteKey, { action: 'shorten' });
         }
       } catch (err) {
         // ignore config errors
@@ -116,46 +124,4 @@ document.addEventListener('DOMContentLoaded', () => {
       aliasMsg.classList.remove('hidden');
     });
   }
-});
-document.addEventListener('DOMContentLoaded', () => {
-  const form = document.getElementById('shorten-form');
-  const input = document.getElementById('url-input');
-  const result = document.getElementById('result');
-  const shortLink = document.getElementById('short-link');
-  const copyBtn = document.getElementById('copy-btn');
-  const statsLink = document.getElementById('stats-link');
-
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const url = input.value.trim();
-    if (!url) return;
-    try {
-      const res = await fetch('/api/shorten', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error');
-      shortLink.textContent = data.shortUrl;
-      shortLink.setAttribute('data-url', data.shortUrl);
-      shortLink.innerHTML = `<a href="${data.shortUrl}" target="_blank">${data.shortUrl}</a>`;
-      statsLink.href = `/api/stats/${data.code}`;
-      result.classList.remove('hidden');
-    } catch (err) {
-      alert('Error: ' + err.message);
-    }
-  });
-
-  copyBtn.addEventListener('click', async () => {
-    const url = shortLink.getAttribute('data-url');
-    if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
-      copyBtn.textContent = 'Copiado';
-      setTimeout(() => (copyBtn.textContent = 'Copiar'), 2000);
-    } catch (err) {
-      alert('No se pudo copiar');
-    }
-  });
 });
