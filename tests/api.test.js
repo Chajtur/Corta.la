@@ -95,6 +95,9 @@ async function request(path, { cookie, ...options } = {}) {
 }
 
 test('accounts own links, see private aggregate stats, and can only delete their own links', async (t) => {
+  const guestSession = await request('/api/me');
+  assert.equal(guestSession.response.status, 200);
+  assert.equal(guestSession.data.user, null);
   const registered = await request('/api/auth/register', {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ email: 'first@example.com', password: 'a-very-secure-password' }),

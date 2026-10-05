@@ -288,7 +288,16 @@ app.post('/api/auth/logout', (req, res) => {
   res.status(204).end();
 });
 
-app.get('/api/me', requireUser, (req, res) => res.json({ user: { id: req.user.id, email: req.user.email, email_verified_at: req.user.email_verified_at } }));
+app.get('/api/me', async (req, res) => {
+  try {
+    const user = await optionalUser(req);
+    if (!user) return res.json({ user: null });
+    res.json({ user: { id: user.id, email: user.email, email_verified_at: user.email_verified_at } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar la sesión.' });
+  }
+});
 
 app.get('/api/my/urls', requireUser, async (req, res) => {
   try {

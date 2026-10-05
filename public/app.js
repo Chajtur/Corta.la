@@ -101,6 +101,12 @@ async function refreshAccount() {
   const dashboardView = document.getElementById('dashboard-view');
   try {
     const { user } = await api('/api/me');
+    if (!user) {
+      currentUser = null;
+      dashboardView.classList.add('hidden');
+      authView.classList.remove('hidden');
+      return;
+    }
     currentUser = user;
     authView.classList.add('hidden');
     dashboardView.classList.remove('hidden');
