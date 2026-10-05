@@ -53,7 +53,23 @@ async function init() {
       id INT AUTO_INCREMENT PRIMARY KEY,
       email VARCHAR(254) NOT NULL UNIQUE,
       password_hash VARCHAR(255) NOT NULL,
+      email_verified_at DATETIME NULL,
+      auth_version INT NOT NULL DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB;
+  `;
+
+  const createAuthTokens = `
+    CREATE TABLE IF NOT EXISTS auth_tokens (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      purpose ENUM('verify_email', 'reset_password') NOT NULL,
+      token_hash CHAR(64) NOT NULL UNIQUE,
+      expires_at DATETIME NOT NULL,
+      used_at DATETIME NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_auth_tokens_user_purpose (user_id, purpose),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     ) ENGINE=InnoDB;
   `;
 
@@ -61,6 +77,15 @@ async function init() {
   try {
     await conn.query(createUrls);
     await conn.query(createUsers);
+    const [userColumns] = await conn.query(`SHOW COLUMNS FROM users`);
+    const existingUserColumns = new Set(userColumns.map((column) => column.Field));
+    if (!existingUserColumns.has('email_verified_at')) {
+      await conn.query(`ALTER TABLE users ADD COLUMN email_verified_at DATETIME NULL`);
+      // Preserve access for accounts that predate email verification.
+      await conn.query(`UPDATE users SET email_verified_at = COALESCE(created_at, CURRENT_TIMESTAMP) WHERE email_verified_at IS NULL`);
+    }
+    if (!existingUserColumns.has('auth_version')) await conn.query(`ALTER TABLE users ADD COLUMN auth_version INT NOT NULL DEFAULT 0`);
+    await conn.query(createAuthTokens);
     // Apply additive migrations to installations created by earlier versions.
     const [columns] = await conn.query(`SHOW COLUMNS FROM urls`);
     const existing = new Set(columns.map((column) => column.Field));
@@ -146,12 +171,12 @@ async function createUser(email, passwordHash) {
 }
 
 async function getUserByEmail(email) {
-  const [rows] = await pool.execute(`SELECT id, email, password_hash, created_at FROM users WHERE email = ? LIMIT 1`, [email]);
+  const [rows] = await pool.execute(`SELECT id, email, password_hash, email_verified_at, auth_version, created_at FROM users WHERE email = ? LIMIT 1`, [email]);
   return rows[0] || null;
 }
 
 async function getUserById(id) {
-  const [rows] = await pool.execute(`SELECT id, email, created_at FROM users WHERE id = ? LIMIT 1`, [id]);
+  const [rows] = await pool.execute(`SELECT id, email, email_verified_at, auth_version, created_at FROM users WHERE id = ? LIMIT 1`, [id]);
   return rows[0] || null;
 }
 
@@ -171,10 +196,70 @@ async function deleteUserUrl(userId, urlId) {
   return result.affectedRows > 0;
 }
 
+async function createAuthToken(userId, purpose, tokenHash, expiresAt) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.execute(`DELETE FROM auth_tokens WHERE user_id = ? AND purpose = ? AND used_at IS NULL`, [userId, purpose]);
+    await conn.execute(`INSERT INTO auth_tokens (user_id, purpose, token_hash, expires_at) VALUES (?, ?, ?, ?)`, [userId, purpose, tokenHash, expiresAt]);
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+async function verifyEmailWithToken(tokenHash) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.execute(`SELECT id, user_id FROM auth_tokens WHERE token_hash = ? AND purpose = 'verify_email' AND used_at IS NULL AND expires_at > NOW() FOR UPDATE`, [tokenHash]);
+    if (!rows.length) {
+      await conn.rollback();
+      return false;
+    }
+    const token = rows[0];
+    await conn.execute(`UPDATE auth_tokens SET used_at = NOW() WHERE id = ?`, [token.id]);
+    await conn.execute(`UPDATE users SET email_verified_at = COALESCE(email_verified_at, NOW()) WHERE id = ?`, [token.user_id]);
+    await conn.commit();
+    return true;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+async function resetPasswordWithToken(tokenHash, passwordHash) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.execute(`SELECT id, user_id FROM auth_tokens WHERE token_hash = ? AND purpose = 'reset_password' AND used_at IS NULL AND expires_at > NOW() FOR UPDATE`, [tokenHash]);
+    if (!rows.length) {
+      await conn.rollback();
+      return false;
+    }
+    const token = rows[0];
+    await conn.execute(`UPDATE auth_tokens SET used_at = NOW() WHERE id = ?`, [token.id]);
+    await conn.execute(`UPDATE users SET password_hash = ?, auth_version = auth_version + 1 WHERE id = ?`, [passwordHash, token.user_id]);
+    await conn.execute(`UPDATE auth_tokens SET used_at = NOW() WHERE user_id = ? AND purpose = 'reset_password' AND used_at IS NULL`, [token.user_id]);
+    await conn.commit();
+    return true;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
 async function getAllUrls() {
   const [rows] = await pool.execute(`SELECT id, code, original_url, owner_user_id, plan, expires_at, created_at, clicks FROM urls ORDER BY created_at DESC LIMIT 1000`);
   return rows;
 }
 
-module.exports = { init, createUrl, getUrlByCode, recordClick, incrementClicks, getStats, getAllUrls, getUserUrls, createUser, getUserByEmail, getUserById, setUrlPlan, deleteUserUrl, recordClickAndIncrement, pool };
+module.exports = { init, createUrl, getUrlByCode, recordClick, incrementClicks, getStats, getAllUrls, getUserUrls, createUser, getUserByEmail, getUserById, createAuthToken, verifyEmailWithToken, resetPasswordWithToken, setUrlPlan, deleteUserUrl, recordClickAndIncrement, pool };
 

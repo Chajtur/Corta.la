@@ -8,10 +8,12 @@ const { contentSecurityPolicy } = helmet;
 const cors = require('cors');
 const morgan = require('morgan');
 const bodyParser = require('body-parser');
+const path = require('path');
 const { nanoid } = require('nanoid');
 const crypto = require('crypto');
 const { promisify } = require('util');
 const db = require('./db');
+const emailService = require('./email');
 const scrypt = promisify(crypto.scrypt);
 
 const app = express();
@@ -44,13 +46,13 @@ if (process.env.NODE_ENV === 'production' && (!process.env.SESSION_SECRET || pro
   throw new Error('SESSION_SECRET must contain at least 32 characters in production');
 }
 
-function signSession(userId, expiresAt) {
-  const payload = Buffer.from(JSON.stringify({ userId, expiresAt })).toString('base64url');
+function signSession(userId, sessionVersion, expiresAt) {
+  const payload = Buffer.from(JSON.stringify({ userId, sessionVersion, expiresAt })).toString('base64url');
   const signature = crypto.createHmac('sha256', sessionSecret).update(payload).digest('base64url');
   return `${payload}.${signature}`;
 }
 
-function getSessionUserId(req) {
+function getSession(req) {
   const cookie = (req.headers.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith(`${sessionCookie}=`));
   if (!cookie) return null;
   const value = cookie.slice(sessionCookie.length + 1);
@@ -62,15 +64,15 @@ function getSessionUserId(req) {
   if (received.length !== expected.length || !crypto.timingSafeEqual(received, expected)) return null;
   try {
     const session = JSON.parse(Buffer.from(payload, 'base64url').toString());
-    if (!Number.isInteger(session.userId) || session.expiresAt <= Date.now()) return null;
-    return session.userId;
+    if (!Number.isInteger(session.userId) || !Number.isInteger(session.sessionVersion) || session.expiresAt <= Date.now()) return null;
+    return session;
   } catch { return null; }
 }
 
-function setSessionCookie(res, userId) {
+function setSessionCookie(res, user) {
   const expiresAt = Date.now() + 14 * 86400000;
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  res.setHeader('Set-Cookie', `${sessionCookie}=${encodeURIComponent(signSession(userId, expiresAt))}; Path=/; HttpOnly; SameSite=Lax; Max-Age=1209600${secure}`);
+  res.setHeader('Set-Cookie', `${sessionCookie}=${encodeURIComponent(signSession(user.id, user.auth_version, expiresAt))}; Path=/; HttpOnly; SameSite=Lax; Max-Age=1209600${secure}`);
 }
 
 function clearSessionCookie(res) {
@@ -79,8 +81,30 @@ function clearSessionCookie(res) {
 }
 
 async function optionalUser(req) {
-  const userId = getSessionUserId(req);
-  return userId ? db.getUserById(userId) : null;
+  const session = getSession(req);
+  if (!session) return null;
+  const user = await db.getUserById(session.userId);
+  return user && user.auth_version === session.sessionVersion ? user : null;
+}
+
+function tokenHash(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function actionUrl(req, route, key, token) {
+  const baseUrl = (process.env.BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  return `${baseUrl}/${route}#${key}=${token}`;
+}
+
+async function sendAuthAction(req, user, purpose) {
+  const token = crypto.randomBytes(32).toString('base64url');
+  const isVerification = purpose === 'verify_email';
+  const kind = isVerification ? 'verify' : 'reset';
+  const lifetime = isVerification ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000;
+  const route = isVerification ? 'verify-email' : 'reset-password';
+  const key = isVerification ? 'verify' : 'reset';
+  await db.createAuthToken(user.id, purpose, tokenHash(token), new Date(Date.now() + lifetime));
+  await emailService.sendAuthEmail({ to: user.email, kind, actionUrl: actionUrl(req, route, key, token) });
 }
 
 async function requireUser(req, res, next) {
@@ -152,6 +176,7 @@ const RESERVED = new Set(['api', 'admin', 'stats', 'config', 'favicon.ico', 'rob
 
 app.post('/api/auth/register', authLimiter, async (req, res) => {
   try {
+    if (!emailService.isConfigured()) return res.status(503).json({ error: 'El envío de correo no está configurado todavía.' });
     const email = String(req.body?.email || '').trim().toLowerCase();
     const password = String(req.body?.password || '');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
@@ -164,8 +189,14 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
     const salt = crypto.randomBytes(16).toString('hex');
     const hash = await scrypt(password, salt, 64);
     const userId = await db.createUser(email, `${salt}:${hash.toString('hex')}`);
-    setSessionCookie(res, userId);
-    res.status(201).json({ user: { id: userId, email } });
+    const user = { id: userId, email };
+    try {
+      await sendAuthAction(req, user, 'verify_email');
+    } catch (emailError) {
+      console.error('verification email send failed', emailError?.response?.data || emailError.message);
+      return res.status(502).json({ error: 'La cuenta se creó, pero no se pudo enviar el correo. Usa Reenviar verificación.' });
+    }
+    res.status(201).json({ message: 'Cuenta creada. Revisa tu correo para verificar la cuenta.' });
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });
     console.error(err);
@@ -185,11 +216,70 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     if (candidate.length !== stored.length || !crypto.timingSafeEqual(candidate, stored)) {
       return res.status(401).json({ error: 'Correo o contraseña incorrectos.' });
     }
-    setSessionCookie(res, user.id);
+    if (!user.email_verified_at) return res.status(403).json({ error: 'Verifica tu correo antes de iniciar sesión.', code: 'EMAIL_NOT_VERIFIED' });
+    setSessionCookie(res, user);
     res.json({ user: { id: user.id, email: user.email } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'No se pudo iniciar sesión.' });
+  }
+});
+
+app.post('/api/auth/verify-email', authLimiter, async (req, res) => {
+  const token = String(req.body?.token || '');
+  if (!/^[A-Za-z0-9_-]{40,64}$/.test(token)) return res.status(400).json({ error: 'El enlace de verificación no es válido o ya venció.' });
+  try {
+    const verified = await db.verifyEmailWithToken(tokenHash(token));
+    if (!verified) return res.status(400).json({ error: 'El enlace de verificación no es válido o ya venció.' });
+    res.json({ message: 'Correo verificado. Ya puedes iniciar sesión.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo verificar el correo.' });
+  }
+});
+
+app.post('/api/auth/resend-verification', authLimiter, async (req, res) => {
+  if (!emailService.isConfigured()) return res.status(503).json({ error: 'El envío de correo no está configurado todavía.' });
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const user = await db.getUserByEmail(email);
+    if (user && !user.email_verified_at) await sendAuthAction(req, user, 'verify_email');
+    res.json({ message: 'Si la cuenta existe y requiere verificación, enviaremos un enlace nuevo.' });
+  } catch (err) {
+    console.error('verification email resend failed', err?.response?.data || err.message);
+    res.status(502).json({ error: 'No se pudo enviar el correo ahora. Intenta de nuevo más tarde.' });
+  }
+});
+
+app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
+  if (!emailService.isConfigured()) return res.status(503).json({ error: 'El envío de correo no está configurado todavía.' });
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const user = await db.getUserByEmail(email);
+    if (user && user.email_verified_at) await sendAuthAction(req, user, 'reset_password');
+    res.json({ message: 'Si existe una cuenta verificada con ese correo, enviaremos instrucciones para cambiar la contraseña.' });
+  } catch (err) {
+    console.error('password reset email send failed', err?.response?.data || err.message);
+    res.status(502).json({ error: 'No se pudo enviar el correo ahora. Intenta de nuevo más tarde.' });
+  }
+});
+
+app.post('/api/auth/reset-password', authLimiter, async (req, res) => {
+  const token = String(req.body?.token || '');
+  const password = String(req.body?.password || '');
+  if (!/^[A-Za-z0-9_-]{40,64}$/.test(token)) return res.status(400).json({ error: 'El enlace no es válido o ya venció.' });
+  if (password.length < 10 || Buffer.byteLength(password, 'utf8') > 128) {
+    return res.status(400).json({ error: 'La contraseña debe tener entre 10 y 128 bytes.' });
+  }
+  try {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = await scrypt(password, salt, 64);
+    const updated = await db.resetPasswordWithToken(tokenHash(token), `${salt}:${hash.toString('hex')}`);
+    if (!updated) return res.status(400).json({ error: 'El enlace no es válido o ya venció.' });
+    res.json({ message: 'Contraseña actualizada. Inicia sesión con tu nueva contraseña.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo actualizar la contraseña.' });
   }
 });
 
@@ -198,7 +288,7 @@ app.post('/api/auth/logout', (req, res) => {
   res.status(204).end();
 });
 
-app.get('/api/me', requireUser, (req, res) => res.json({ user: req.user }));
+app.get('/api/me', requireUser, (req, res) => res.json({ user: { id: req.user.id, email: req.user.email, email_verified_at: req.user.email_verified_at } }));
 
 app.get('/api/my/urls', requireUser, async (req, res) => {
   try {
@@ -320,6 +410,10 @@ app.get('/api/check/:code', checkLimiter, async (req, res) => {
 });
 
 // Redirect handler
+app.get(['/verify-email', '/reset-password'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 app.get('/:code', async (req, res) => {
   try {
     const { code } = req.params;

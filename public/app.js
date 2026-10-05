@@ -127,6 +127,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const aliasRegex = /^[A-Za-z0-9_-]{4,64}$/;
   let siteKey = null;
   let gaMeasurementId = null;
+  const actionFragment = new URLSearchParams(location.hash.slice(1));
+  const verificationToken = actionFragment.get('verify');
+  const resetToken = actionFragment.get('reset');
+  if (verificationToken || resetToken) history.replaceState(null, '', `${location.pathname}${location.search}`);
 
   function enableAnalytics() {
     if (!gaMeasurementId) return;
@@ -226,11 +230,53 @@ document.addEventListener('DOMContentLoaded', async () => {
     const email = document.getElementById('email-input').value.trim();
     const password = document.getElementById('password-input').value;
     try {
-      const endpoint = isRegistering ? '/api/auth/register' : '/api/auth/login';
-      await api(endpoint, { method: 'POST', body: JSON.stringify({ email, password }) });
-      if (window.gtag && localStorage.getItem('cortala-ga-consent') === 'accepted') window.gtag('event', isRegistering ? 'sign_up' : 'login', { method: 'email' });
-      await refreshAccount();
+      const registering = isRegistering;
+      const endpoint = registering ? '/api/auth/register' : '/api/auth/login';
+      const data = await api(endpoint, { method: 'POST', body: JSON.stringify({ email, password }) });
+      if (window.gtag && localStorage.getItem('cortala-ga-consent') === 'accepted') window.gtag('event', registering ? 'sign_up' : 'login', { method: 'email' });
+      if (registering) {
+        document.getElementById('password-input').value = '';
+        showMessage(authMessage, data.message, 'success');
+      } else {
+        await refreshAccount();
+      }
     } catch (error) { showMessage(authMessage, error.message); }
+  });
+
+  document.getElementById('resend-verification').addEventListener('click', async () => {
+    const authMessage = document.getElementById('auth-message');
+    try {
+      const data = await api('/api/auth/resend-verification', { method: 'POST', body: JSON.stringify({ email: document.getElementById('email-input').value.trim() }) });
+      showMessage(authMessage, data.message, 'success');
+    } catch (error) { showMessage(authMessage, error.message); }
+  });
+
+  document.getElementById('forgot-password').addEventListener('click', async () => {
+    const authMessage = document.getElementById('auth-message');
+    try {
+      const data = await api('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email: document.getElementById('email-input').value.trim() }) });
+      showMessage(authMessage, data.message, 'success');
+    } catch (error) { showMessage(authMessage, error.message); }
+  });
+
+  const resetPasswordForm = document.getElementById('reset-password-form');
+  resetPasswordForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      const data = await api('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ token: resetToken, password: document.getElementById('new-password-input').value }) });
+      resetPasswordForm.classList.add('hidden');
+      document.getElementById('auth-form').classList.remove('hidden');
+      isRegistering = false;
+      document.getElementById('auth-submit').textContent = 'Iniciar sesión';
+      document.getElementById('auth-toggle').textContent = 'Crear cuenta';
+      showMessage(document.getElementById('auth-message'), data.message, 'success');
+    } catch (error) { showMessage(document.getElementById('reset-message'), error.message); }
+  });
+
+  document.getElementById('back-to-login').addEventListener('click', () => {
+    resetPasswordForm.classList.add('hidden');
+    document.getElementById('auth-form').classList.remove('hidden');
+    history.replaceState(null, '', `${location.pathname}${location.search}`);
   });
 
   document.getElementById('logout-btn').addEventListener('click', async () => {
@@ -238,5 +284,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     await refreshAccount();
   });
 
-  await refreshAccount();
+  if (verificationToken) {
+    try {
+      const data = await api('/api/auth/verify-email', { method: 'POST', body: JSON.stringify({ token: verificationToken }) });
+      showMessage(document.getElementById('auth-message'), data.message, 'success');
+    } catch (error) { showMessage(document.getElementById('auth-message'), error.message); }
+  } else if (resetToken) {
+    document.getElementById('auth-form').classList.add('hidden');
+    resetPasswordForm.classList.remove('hidden');
+  }
+
+  if (!resetToken) await refreshAccount();
 });
