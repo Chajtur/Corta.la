@@ -1,71 +1,63 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>corta.la — Acorta URLs</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Acorta, organiza y mide tus enlaces desde corta.la." />
+    <title>corta.la — Acorta y mide tus enlaces</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
-    <main class="max-w-2xl mx-auto mt-12 bg-white p-8 rounded shadow p-4 pb-1">
-      <h1 class="text-3xl font-bold">corta.la</h1>
-      <p class="text-gray-600 mt-2">
-        Ingresa una URL larga y te devolveremos una versión corta.
-      </p>
+    <main class="container">
+      <header class="brand-row">
+        <div><span class="brand-mark">c.</span><h1>corta.la</h1></div>
+        <span class="eyebrow">ENLACES MÁS INTELIGENTES</span>
+      </header>
+      <p class="intro">Acorta, organiza y mide tus enlaces desde un solo lugar.</p>
 
-      <form id="shorten-form" class="mt-6">
-        <div class="flex flex-col w-full gap-3">
-          <div class="w-full">
-            <input
-              id="url-input"
-              type="url"
-              class="w-full border rounded p-3"
-              placeholder="https://ejemplo.com/larga/ruta"
-              required
-            />
-          </div>
-            <div class="grid grid-cols-2 gap-2 md:grid-cols-4">
-              <input
-              id="alias-input"
-              type="text"
-              class="md:col-span-2 border rounded p-2"
-              placeholder="Alias opcional (ej: mi-enlace)"
-              />
-            <button
-              id="check-alias"
-              type="button"
-              class="px-3 py-2 bg-blue-600 text-white rounded"
-            >
-              Comprobar
-            </button>
-            <button
-            type="submit"
-            class="col-span-2 md:col-span-1 px-3 py-2 bg-green-600 text-white rounded"
-            >
-            Acortar
-          </button>
-            </div>
+      <form id="shorten-form" class="shorten-form">
+        <label for="url-input">URL de destino</label>
+        <input id="url-input" type="url" placeholder="https://ejemplo.com/mi-pagina" required />
+        <div class="alias-row">
+          <input id="alias-input" type="text" placeholder="Alias personalizado (opcional)" maxlength="64" />
+          <button id="check-alias" type="button" class="button button-secondary">Comprobar</button>
+          <button type="submit" class="button">Acortar URL</button>
         </div>
+        <p id="alias-msg" class="message hidden" aria-live="polite"></p>
       </form>
 
-      <div id="alias-msg" class="hidden"></div>
-
-      <div id="result" class="hidden">
-        <p>URL corta:</p>
-        <div id="short-link"></div>
-        <button id="copy-btn" class="px-3 py-2 bg-green-600 rounded">Copiar</button>
-        <button id="stats-link-btn" class="px-3 py-2 bg-teal-600 rounded">
-          <a id="stats-link" href="#">Ver estadísticas</a>
-        </div>
-      </div>
-
-      <section class="notes bg-gray-600 text-white p-2 mt-6 rounded">
-        <h2 class="text-sm">Privacidad</h2>
-        <p class="text-xs">No compartiremos tus URLs públicamente sin tu consentimiento.</p>
+      <section id="result" class="result-card hidden" aria-live="polite">
+        <div><span class="eyebrow">TU NUEVO ENLACE</span><a id="short-link" target="_blank" rel="noopener"></a></div>
+        <button id="copy-btn" class="button button-secondary" type="button">Copiar</button>
+        <p id="expiry-note" class="muted"></p>
       </section>
-    </main>
 
+      <section class="account-section">
+        <div id="auth-view">
+          <div class="section-heading"><div><span class="eyebrow">TU ESPACIO</span><h2>Guarda tus enlaces y consulta sus resultados</h2></div></div>
+          <form id="auth-form" class="auth-form">
+            <label for="email-input">Correo electrónico</label>
+            <input id="email-input" type="email" autocomplete="email" placeholder="tu@correo.com" required />
+            <label for="password-input">Contraseña</label>
+            <input id="password-input" type="password" autocomplete="current-password" minlength="10" placeholder="Mínimo 10 caracteres" required />
+            <div class="auth-actions"><button id="auth-submit" class="button" type="submit">Iniciar sesión</button><button id="auth-toggle" class="text-button" type="button">Crear cuenta</button></div>
+            <p id="auth-message" class="message" aria-live="polite"></p>
+          </form>
+          <p class="muted">Sin cuenta también puedes crear enlaces. Una cuenta te permite reunirlos y ver sus estadísticas.</p>
+        </div>
+        <div id="dashboard-view" class="hidden">
+          <div class="section-heading"><div><span class="eyebrow">PANEL</span><h2>Mis enlaces</h2><p id="account-email" class="muted"></p></div><button id="logout-btn" class="text-button" type="button">Cerrar sesión</button></div>
+          <p id="plan-note" class="muted"></p>
+          <div id="url-list" class="url-list"></div>
+        </div>
+      </section>
+
+      <footer><span>Gratis para empezar · Estadísticas privadas en tu cuenta</span><span><button id="cookie-settings" class="text-button" type="button">Preferencias de cookies</button> · Desarrollado por Hondutech</span></footer>
+    </main>
+    <aside id="cookie-banner" class="cookie-banner hidden" role="dialog" aria-label="Preferencias de analítica">
+      <div><strong>Analítica opcional</strong><p>Si aceptas, usaremos Google Analytics para medir visitas y uso de corta.la. Tus estadísticas de enlaces siguen siendo privadas.</p></div>
+      <div class="cookie-actions"><button id="cookie-reject" class="button button-secondary" type="button">Rechazar</button><button id="cookie-accept" class="button" type="button">Aceptar</button></div>
+    </aside>
     <script src="/app.js"></script>
   </body>
 </html>

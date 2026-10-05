@@ -26,7 +26,24 @@
         data.urls.forEach(u => {
           const el = document.createElement('div');
           el.className = 'border p-3 rounded mb-2';
-          el.innerHTML = `<div class="flex justify-between"><div><strong>${u.code}</strong> — <a class="text-blue-600" href="${u.original_url}" target="_blank">${u.original_url}</a></div><div class="text-sm text-gray-500">Clicks: ${u.clicks}</div></div>`;
+          const row = document.createElement('div');
+          row.className = 'flex flex-wrap justify-between gap-2';
+          const details = document.createElement('div');
+          const code = document.createElement('strong');
+          code.textContent = u.code;
+          const separator = document.createTextNode(' — ');
+          const target = document.createElement('a');
+          target.className = 'text-blue-600 break-all';
+          target.href = u.original_url;
+          target.target = '_blank';
+          target.rel = 'noopener noreferrer';
+          target.textContent = u.original_url;
+          details.append(code, separator, target);
+          const meta = document.createElement('div');
+          meta.className = 'text-sm text-gray-500';
+          meta.textContent = `Clicks: ${u.clicks} · ${u.plan} · ${u.expires_at || 'sin vencimiento'} · propietario: ${u.owner_user_id || 'invitado'}`;
+          row.append(details, meta);
+          el.append(row);
           container.appendChild(el);
         });
       } catch (err) { alert('Error: ' + err.message); }

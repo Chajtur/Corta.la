@@ -1,51 +1,50 @@
-# corta.la — URL shortener (scaffold)
+# corta.la
 
-Proyecto mínimo para un acortador de URLs con landing page, API y estadísticas.
+Acortador de URLs con cuentas, panel privado, estadísticas agregadas por enlace y vencimiento configurable.
 
-Instalación (Windows PowerShell):
+## Ejecutar localmente
 
-1) Proveer variables de ambiente para MySQL (puedes crear `.env` con los valores, ejemplo: `.env.example`)
+1. Copia `.env.example` a `.env` y configura una base de datos MySQL.
+2. Instala dependencias con `npm install`.
+3. Inicia con `npm start` (o `npm run dev`).
 
-```powershell
-cd 'c:\Projects\Corta.la'
-npm install
-npm start
-```
+En desarrollo se puede usar `REQUIRE_CAPTCHA=false`. En producción, configura reCAPTCHA, `SESSION_SECRET` aleatorio y estable, `BASE_URL` y una conexión MySQL persistente. `FREE_URL_TTL_DAYS` determina la duración del plan gratuito (30 días por defecto). El servidor migra las tablas al iniciar; los enlaces gratuitos que ya existían reciben un periodo de gracia completo contado desde esa primera migración para no romperlos de inmediato.
 
-Variables de entorno requeridas (ejemplo — ver `.env.example`):
+## Funciones disponibles
 
-- `DB_HOST` — host de la base de datos
-- `DB_USER` — usuario
-- `DB_PASSWORD` — contraseña
-- `DB_NAME` — nombre de la base de datos
-- `DB_PORT` — puerto (opcional, default 3306)
+- `POST /api/shorten` — crea un enlace gratuito; si hay sesión, lo guarda en la cuenta. Responde con `code`, `shortUrl`, `expiresAt` y `owner`.
+- `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/me` — registro, acceso y sesión protegida por cookie HttpOnly.
+- `GET /api/my/urls` — enlaces, clics, plan y vencimiento del usuario autenticado.
+- `GET /api/my/urls/:id/stats` — total de clics y serie diaria, solo para propietario.
+- `DELETE /api/my/urls/:id` — elimina el enlace del propietario y sus clics asociados.
+- `GET /:code` — redirige con HTTP 302 y registra clics; devuelve HTTP 410 al vencer.
+- `GET /api/check/:code` — disponibilidad de alias.
+- `GET /api/config` — claves públicas para CAPTCHA/GA4 y duración del plan gratuito.
+- `GET /api/admin/urls` — inventario con `x-admin-token`.
+- `POST /api/admin/urls/:id/plan` con `{ "plan": "paid" }` o `{ "plan": "free" }` — concesión administrativa del plan. Paid elimina el vencimiento; free vuelve a aplicar el periodo configurado.
 
-Puntos principales:
-- `POST /api/shorten` { url } => `{ code, shortUrl }`
-- `POST /api/shorten` { url, code? } => `{ code, shortUrl }` (opcional `code` para alias personalizado)
-- `GET /api/check/:code` => `{ available: true|false }` comprobar disponibilidad de alias
- - `GET /api/config` => `{ recaptchaSiteKey: string | null }` devuelve config pública para el frontend
+El endpoint legado `GET /api/stats/:code` requiere ahora una sesión y propiedad del enlace. Las estadísticas no devuelven IP ni agente de usuario. Las filas históricas todavía contienen esos campos en la base de datos; antes de ofrecer estadísticas detalladas o vender reportes, define retención y elimina/anónimiza esos datos heredados.
 
-Admin endpoints (protegidos):
-- `GET /api/admin/urls` => lista de URLs (protegido por `ADMIN_TOKEN` via header `x-admin-token` o ?token=)
+## Preparar monetización
 
-Protección contra abuso:
-- La creación de URLs requiere reCAPTCHA v3 por defecto. Define `RECAPTCHA_SECRET` y `RECAPTCHA_SITE_KEY`; si falta alguna, `POST /api/shorten` responde `503` y no crea enlaces.
-- El token debe corresponder a la acción `shorten` y superar `RECAPTCHA_MIN_SCORE` (por defecto `0.7`). Ajusta este valor solo después de revisar falsos positivos.
-- Cada IP puede crear 10 URLs por hora por defecto. Configura `SHORTEN_RATE_LIMIT` y `SHORTEN_RATE_WINDOW_MINUTES` para cambiar la cuota y su ventana.
-- Define `BLOCKED_URL_HOSTS` como una lista de dominios separada por comas para denegar campañas conocidas, por ejemplo: `BLOCKED_URL_HOSTS=spam.example,baddomain.test`. Los subdominios también se bloquean.
-- Durante pruebas locales sin CAPTCHA, establece `REQUIRE_CAPTCHA=false`. No uses ese valor en el servidor público.
-- El limitador en memoria es adecuado para una instancia. Con varias instancias o reinicios frecuentes, configura un almacenamiento compartido (por ejemplo Redis) para que el límite por IP sea efectivo en todo el despliegue.
-- `GET /:code` => redirección 302 a la URL original (registra click)
-- `GET /api/stats/:code` => devuelve metadatos y clicks recientes
+- **Suscripción pagada:** el modelo distingue enlaces gratuitos con vencimiento de enlaces pagados indefinidos. Por ahora, el plan pagado solo se concede desde el endpoint de administración; aún no hay checkout, cobros, webhooks, facturación ni cancelaciones. El siguiente paso es elegir el procesador que pueda liquidar en Honduras, implementar webhooks idempotentes y conceder/revocar `paid` desde eventos verificados.
+- **Google Analytics 4:** `GA_MEASUREMENT_ID=G-...` habilita Analytics en la página pública y registra carga y evento `shorten_url`. Mide adquisición y conversión del sitio; las visitas a enlaces cortos se miden con la base propia. No se ejecuta Analytics en la redirección, así que la redirección no se demora ni se presenta falsamente como una vista de página.
+- **Publicidad:** primero mide visitas y creación de enlaces. Banners en la página principal son de bajo impacto; una página intermedia con anuncios por cada clic podría producir más impresiones, pero cambia la experiencia del producto y requiere reglas claras de exclusión para el plan pagado. No se sirve publicidad hasta integrar un proveedor y definir privacidad, consentimiento y controles contra enlaces maliciosos.
+- **Otras opciones:** dominio personalizado, más volumen, métricas y retención extendidas, QR con marca, exportación y equipo son beneficios que se pueden probar con usuarios antes de fijar precios.
 
-Archivos creados:
-- `server.js` — servidor Express
-- `db.js` — MySQL inicializador y helpers (lee credenciales desde env)
-- `public/` — landing: `index.html`, `app.js`, `style.css`
+GA4 es opcional y solo agrega analítica del sitio cuando se configura la propiedad; el script no se carga hasta que la persona acepta las cookies de analítica. La preferencia se puede cambiar desde el pie de página. Publica una política de privacidad antes de activarlo. Los nuevos registros de clic ya no guardan IP ni agente de usuario; registros históricos pueden contenerlos. Los datos de clic de primera parte tampoco son una medición perfecta de personas únicas: bots, previsualizaciones y escáneres pueden generar clics.
 
-Siguientes pasos sugeridos:
-- Protecciones anti-abuso (rate limit, captchas)
-- Panel de administración para ver estadísticas y monetizar
-- Integración con proveedor de anuncios o banners en el landing
-- Dominio y certificados TLS en producción
+Como punto de partida para Honduras, **Tilopay merece una consulta comercial**: publica una solución regional de suscripciones, reintentos de cobro y webhooks ([producto](https://tilopay.com/en/producto/suscripciones)). Confirma por escrito onboarding de comercios hondureños, banco/liquidación, comisiones, acceso API y condiciones del producto antes de construir la integración. Stripe no incluye Honduras en su [lista actual de países con disponibilidad para pagos](https://stripe.com/global), por lo que no conviene depender de una cuenta local de Stripe sin una estructura comercial elegible en otro país.
+
+## Pendiente antes de cobrar a usuarios
+
+1. Escoger proveedor según disponibilidad de cuenta comercial, liquidación local, moneda y cargos recurrentes en Honduras.
+2. Implementar checkout y webhooks firmados con estados de suscripción, reintentos, cancelación, reembolso y periodo de gracia.
+3. Añadir verificación de correo, recuperación de contraseña y una política de privacidad/retención de datos.
+4. Usar almacenamiento compartido para rate limits al escalar a más de una instancia, y configurar alertas, backups y limpieza de datos vencidos.
+
+## Pruebas
+
+`npm test` ejecuta pruebas de API con una base simulada en memoria. No escribe en la base configurada en `.env`.
+
+Desarrollado por Hondutech.
