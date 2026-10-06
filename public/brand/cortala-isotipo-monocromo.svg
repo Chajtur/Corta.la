@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="title">
+  <title id="title">Isotipo monocromo de corta.la</title>
+  <path d="M122 150h268" stroke="currentColor" stroke-width="42" stroke-linecap="round"/>
+  <circle cx="122" cy="150" r="14" fill="currentColor"/>
+  <path d="M256 204v110m-48-48 48 48 48-48" stroke="currentColor" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M178 378h156" stroke="currentColor" stroke-width="40" stroke-linecap="round"/>
+  <circle cx="178" cy="378" r="13" fill="currentColor"/>
+</svg>

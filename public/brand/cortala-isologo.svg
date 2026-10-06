@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="188" viewBox="0 0 760 188" fill="none" role="img" aria-labelledby="title">
+  <title id="title">Isologo de corta.la</title>
+  <defs><linearGradient id="navy" x1="14" y1="8" x2="738" y2="180" gradientUnits="userSpaceOnUse"><stop stop-color="#10233F"/><stop offset="1" stop-color="#1D4ED8"/></linearGradient><linearGradient id="cyan" x1="67" y1="123" x2="117" y2="136" gradientUnits="userSpaceOnUse"><stop stop-color="#67E8F9"/><stop offset="1" stop-color="#22D3EE"/></linearGradient></defs>
+  <rect x="8" y="8" width="744" height="172" rx="54" fill="url(#navy)"/>
+  <rect x="27" y="27" width="134" height="134" rx="42" fill="#2563EB"/>
+  <path d="M56 64h76" stroke="#fff" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="56" cy="64" r="4" fill="#67E8F9"/>
+  <path d="M94 78v31m-14-13 14 13 14-13" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M73 128h42" stroke="url(#cyan)" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="73" cy="128" r="4" fill="#fff"/>
+  <text x="195" y="102" fill="#fff" font-family="Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="82" font-weight="750" letter-spacing="-4">corta<tspan fill="#93C5FD">.la</tspan></text>
+  <text x="201" y="143" fill="#DBEAFE" font-family="Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="18" font-weight="700" letter-spacing="3">ACORTA TUS ENLACES</text>
+</svg>

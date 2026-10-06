@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="title">
+  <title id="title">Isotipo de corta.la</title>
+  <defs><linearGradient id="blue" x1="54" y1="44" x2="458" y2="474" gradientUnits="userSpaceOnUse"><stop stop-color="#3B82F6"/><stop offset="1" stop-color="#1D4ED8"/></linearGradient><linearGradient id="cyan" x1="176" y1="366" x2="336" y2="400" gradientUnits="userSpaceOnUse"><stop stop-color="#67E8F9"/><stop offset="1" stop-color="#22D3EE"/></linearGradient></defs>
+  <rect x="16" y="16" width="480" height="480" rx="148" fill="url(#blue)"/>
+  <path d="M122 150h268" stroke="#fff" stroke-width="42" stroke-linecap="round"/>
+  <circle cx="122" cy="150" r="14" fill="#67E8F9"/>
+  <path d="M256 204v110m-48-48 48 48 48-48" stroke="#fff" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M178 378h156" stroke="url(#cyan)" stroke-width="40" stroke-linecap="round"/>
+  <circle cx="178" cy="378" r="13" fill="#fff"/>
+</svg>
